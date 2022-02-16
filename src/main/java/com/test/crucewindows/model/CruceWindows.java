@@ -6,6 +6,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.Map;
+import java.util.Map.Entry;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -17,10 +18,10 @@ import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import com.test.crucewindows.exceptions.InventoryException;
 
 public class CruceWindows {
-	
+
 	private static String windowsFilePath = "";
 	private static String ucmdbFilePath = "";
-		
+
 	public static boolean checkIpAddressOK(String text) {
 		String regexCode = "^([01]?\\d\\d?|2[0-4]\\d|25[0-5])\\." + "([01]?\\d\\d?|2[0-4]\\d|25[0-5])\\."
 				+ "([01]?\\d\\d?|2[0-4]\\d|25[0-5])\\." + "([01]?\\d\\d?|2[0-4]\\d|25[0-5])$";
@@ -82,13 +83,13 @@ public class CruceWindows {
 		//ARROJJAR ERROR, NO CUMPLE ESTANDAR
 		return ServCodeAndHostnameOK;
 	}
-	
 
-	
+
+
 	public static void main(String[] args) {
 		windowsFilePath = "C:\\Users\\I5-9600K\\Downloads\\Cruce Windows DC 2022.xlsx";
 		ucmdbFilePath = "C:\\Users\\I5-9600K\\Downloads\\ucmdb2018.xlsx";
-		HashMap<String, String> inventoryUcmdb = readUcmdbInventory(ucmdbFilePath);
+		HashMap<String, CiWindows> inventoryUcmdb = readUcmdbInventory(ucmdbFilePath);
 		readWindowsInventary(windowsFilePath,inventoryUcmdb);
 	}
 	public static String getStringCellValue(Cell cell) {
@@ -111,8 +112,8 @@ public class CruceWindows {
 		return cellValue;
 	}
 
-	public static HashMap<String, String> readUcmdbInventory(String ucmdbFilePath) {
-		HashMap<String, String> mapCodHostIp = new HashMap<>();
+	public static HashMap<String, CiWindows> readUcmdbInventory(String ucmdbFilePath) {
+		HashMap<String, CiWindows> mapCodHostIp = new HashMap<>();
 		try {// ver si realmente al invocar el metodo crear el archivo. porque lo creria y
 			// cerraria 1k veces
 			FileInputStream file = new FileInputStream(new File(ucmdbFilePath));
@@ -121,6 +122,7 @@ public class CruceWindows {
 			Iterator<Row> rowUcmdbIterator = ucmdbSheet.iterator();
 			ArrayList<String> header = new ArrayList<String>();
 			while (rowUcmdbIterator.hasNext()) { // recorre filas
+				CiWindows ciwindows = new CiWindows();
 				Row rowUcmdb = rowUcmdbIterator.next();
 				String displayLabel = "", serviceCode = "", ipManagement = "", ipWmi = ""; // VER MEJOR FORMA DE
 				// GUARDAR. PUEDE
@@ -132,20 +134,24 @@ public class CruceWindows {
 					cellValue = getStringCellValue(rowUcmdb.getCell(currentCell));
 					if (rowUcmdb.getRowNum() == 0) { // Guarda el encabezado
 						header.add(cellValue);
-						System.out.print(cellValue+"|");
+						//System.out.print(cellValue+"|");
 					} else {
 						switch (header.get(currentCell)) { // Busca en el encabezado los titulos y guarda el valor a la
 						// columna que se necesita.
 						case "[Windows] : Display Label":
+							ciwindows.setDisplayLabel(cellValue);
 							displayLabel = cellValue;
 							break;
-						case "[Windows] : Service Code":
+						case "[Windows] : Onyx ServiceCodes":
+							ciwindows.setOnyxServiceCodes(cellValue);
 							serviceCode = cellValue;
 							break;
-						case "[Windows] : IP Gestión":
+						case "[Windows] : Ip Gestion":
+							ciwindows.setIpGestion(cellValue);
 							ipManagement = cellValue;
 							break;
-						case "[Windows] : Ip WMI":
+						case "[Windows] : IpAddress":
+							ciwindows.setIpAddress(cellValue);
 							ipWmi = cellValue;
 							break;
 						}
@@ -158,8 +164,9 @@ public class CruceWindows {
 						ipManagement = "Sin ip gestión valida en UCMDB para hacer cruce";
 					}
 				}
-				System.out.print("");
-				mapCodHostIp.put(serviceCode + "_" + displayLabel, ipManagement);
+				//System.out.print(""); ///añadir el servicecode_idplsaylabel y como valor el objeto de windows.
+				//
+				mapCodHostIp.put(serviceCode + "_" + displayLabel.toUpperCase(), ciwindows);
 				//System.out.println(serviceCode + "_" + displayLabel + "|" + ipManagement + "|" + ipWmi);
 				/*
 				 * buscar en que columna esta el campo "[Windows] : Display Label",[Windows] :
@@ -167,12 +174,13 @@ public class CruceWindows {
 				 * con servicecode_dislay label, ip gestión
 				 */
 			}
-
+			/*
 			System.out.println("");
-			for (Map.Entry<String, String> elem : mapCodHostIp.entrySet()) {
-				System.out.println(elem.getKey() + "|" + elem.getValue());
+			for (Entry<String, CiWindows> elem : mapCodHostIp.entrySet()) {
+				System.out.println(elem.getKey() + "|" + elem.getValue().getIpGestion());
 			}
-			System.out.println(mapCodHostIp.size());
+			*/
+			System.out.println("CANTIDAD REGISTROS EN UCMDB 2020 "+mapCodHostIp.size());
 
 			file.close();
 			workbook.close();
@@ -183,27 +191,26 @@ public class CruceWindows {
 		return mapCodHostIp;
 	}
 
-	public static void readWindowsInventary(String windowsFilePath, HashMap<String, String> inventoryUcmdb ) {
+	public static void readWindowsInventary(String windowsFilePath, HashMap<String, CiWindows> inventoryUcmdb ) {
+
 		try {
 			FileInputStream fileWindows = new FileInputStream(new File(windowsFilePath));
 			XSSFWorkbook workbookWindows = new XSSFWorkbook(fileWindows);
 			XSSFSheet windowsSheet = workbookWindows.getSheetAt(0);
 			Iterator<Row> rowIterator = windowsSheet.iterator();
 			ArrayList<String> header = new ArrayList<String>();
-			String cellWindowsValue = "", windowsServHost = "", windowsIP = "",windowsClient="";
+			String cellWindowsValue = "", windowsServHost = "", windowsIP = "",windowsClient="", statusMatch="";
 			short cellCount=0;
-
 			while (rowIterator.hasNext()) { // recorre filas de archvowindows
 				Row row = rowIterator.next();
 				Iterator<Cell> cellWindowsIterator = row.cellIterator();
 				boolean checkserv = false, checkIP = false;
 				cellCount = row.getLastCellNum();
-
 				for (short currentCell = 0; currentCell < cellCount; currentCell++) { // recorre las columbas del inv					
 					cellWindowsValue = getStringCellValue(cellWindowsIterator.next());
 					if (row.getRowNum() == 0) {
 						header.add(cellWindowsValue);
-						System.out.print(cellWindowsValue + "|"); // si la fila es cero, imprime el totulo
+						//System.out.print(cellWindowsValue + "|"); // si la fila es cero, imprime el totulo
 					}else {
 						switch (header.get(currentCell)) { // Busca en el encabezado los titulos y guarda el valor a la	columna que se necesita.
 						case "COD_HOSTNAME":
@@ -221,14 +228,27 @@ public class CruceWindows {
 						}
 					}
 				}
-				//valida si el registro actual esta dentro del hash del inventario de UCMDB
-				// System.out.print(windowsServHost+"|"+windowsIP+"|");
-				
-				if(inventaryContainsCodHostAndIP(windowsServHost,windowsIP,inventoryUcmdb)) {
-					//en caso de que coincida se debe marquillar como ok en ucmdb y traer los datos de hostname e ip del inv ucmdb
+
+				CiWindows ciWindows = inventaryContainsCodHostAndIP(windowsServHost.toUpperCase(),windowsIP,inventoryUcmdb);
+				if (ciWindows != null) {
+					statusMatch = "OK en UCMDB"+"|"+ciWindows.getOnyxServiceCodes()+"_"+ciWindows.getDisplayLabel()+"|"+ciWindows.getIpGestion();					
+				}else {
+					statusMatch = "PDT";
 				}
-			}
-			
+				/*
+				//valida si el registro actual esta dentro del hash del inventario de UCMDB
+	System.out.print(windowsServHost+"|"+windowsIP+"|");
+
+				if(inventaryContainsCodHostAndIP(windowsServHost,windowsIP,inventoryUcmdb)) {
+					statusMatch = "OK en UCMDB";
+					//en caso de que coincida se debe marquillar como ok en ucmdb y traer los datos de hostname e ip del inv ucmdb
+
+				}else if (inventaryContainsIP(windowsServHost,windowsIP,inventoryUcmdb)) {
+					statusMatch = "Coincide ip en inv ucmdb 2020";
+				}
+				 */
+				System.out.println(windowsServHost+"|"+windowsIP+"|"+statusMatch+"|");
+			}		
 			fileWindows.close();
 			workbookWindows.close();
 		} catch (Exception ex) {
@@ -237,8 +257,42 @@ public class CruceWindows {
 		// trabajar con StringBuilder.
 		// como no se tiene excel, toca a punta de txt o csv
 	}
-	public static boolean inventaryContainsCodHostAndIP(String windowsServHost,String windowsIP, HashMap<String, String> inventoryUCMDB) {
-		//se debe recorrer el hash y buscar windowsservHost y windows yp. si hace match retorna true, si no, hace falso
-		return false;
+	public static CiWindows inventaryContainsCodHostAndIP(String windowsServHost,String windowsIP, HashMap<String, CiWindows> inventoryUCMDB) {		
+		CiWindows ciWindows = null;
+		if (inventoryUCMDB.size()>0) {
+			if((inventoryUCMDB.containsKey(windowsServHost))
+					&& (inventoryUCMDB.get(windowsServHost).getIpGestion().equals(windowsIP)
+							|| inventoryUCMDB.get(windowsServHost).getIpGestion().contains(windowsIP)
+					|| (inventoryUCMDB.get(windowsServHost).getIpAddress().contains(windowsIP)))) {
+				ciWindows = inventoryUCMDB.get(windowsServHost);	
+			}else {
+				//COINCIDE HOSTNAME PERO LA IP DE GESTIÓN NO, POR ESO NO HACE MATCH
+			}
+		}else if (inventoryUCMDB.containsValue(windowsIP)) { //DEBE BUSCAR LA WINDOWS IP EN TODO EL HASH DE LAS 
+			inventoryUCMDB.get(windowsServHost);
+		}
+		return ciWindows;
 	}
+
+
+
+
+	public static boolean inventaryContainsCodHost (String windowsServHost,String windowsIP, HashMap<String, String> inventoryUCMDB) {
+		boolean inventaryContainsCodHostAndIP = false;
+		if(inventoryUCMDB.size()>0 && (inventoryUCMDB.containsKey(windowsServHost))) {
+
+		}
+		return inventaryContainsCodHostAndIP;
+	}
+	/*
+	public static boolean inventaryContainsIP (String windowsServHost,String windowsIP, HashMap<String, CiWindows> inventoryUCMDB) {
+		boolean inventaryContainsCodHostAndIP = false;
+		if(inventoryUCMDB.size()>0 && (inventoryUCMDB.containsValue(CiWindows))) {
+			inventoryUCMDB.get(windowsServHost);
+			inventaryContainsCodHostAndIP =  true;
+		}
+		return inventaryContainsCodHostAndIP;
+	}	*/
+
+
 }
