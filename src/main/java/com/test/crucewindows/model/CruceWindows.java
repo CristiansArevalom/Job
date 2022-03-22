@@ -2,11 +2,14 @@ package com.test.crucewindows.model;
 
 import java.io.File;
 import java.io.FileInputStream;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Iterator;
+import java.util.Locale;
 //import java.util.Map;
-import java.util.Map.Entry;
+//import java.util.Map.Entry;
 import java.util.Scanner;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -22,7 +25,7 @@ public class CruceWindows {
 
 	private static String windowsFilePath = "";
 	private static String ucmdbFilePath = "";
-
+	private static final Long RANGE_DAYS_LAST_ACCESS_TIME = (long) 5;
 
 	public static void main(String[] args) {
 		try {
@@ -34,7 +37,6 @@ public class CruceWindows {
 			System.out.println("1 = Cruce de inventario torre vs UCMDB");
 			System.out.println("2 = Cruce de UCMDB vs Inventario torre");
 			System.out.println("0 = Salir");
-
 			while (sc.hasNext() && (option>0 && option<3)) {
 				option =Byte.parseByte(sc.nextLine());
 
@@ -47,6 +49,7 @@ public class CruceWindows {
 				}
 
 			}
+			sc.close();
 		}catch (Exception ex) {
 			System.out.println("Error" + ex);
 		}
@@ -172,6 +175,12 @@ public class CruceWindows {
 						case "[Windows] : IpAddress":
 							ciUcmdbWindows.setIpAddress(cellValue);
 							break;
+						case "[Windows] : Protocolo Descubrimiento":
+							ciUcmdbWindows.setProtocoloDescubrimiento(cellValue);
+							break;
+						case "[Windows] : Last Access Time Protocolo":
+							ciUcmdbWindows.setLastAccessTimeProtocolo(cellValue);
+						break;
 						}
 					}
 				}
@@ -205,6 +214,7 @@ public class CruceWindows {
 
 		ArrayList<CiWindows> windowsInventary= new ArrayList<>();
 		try {
+			///PDT AJUSTAR QUE SI ENCUENTRA CELDAS VACIAS, PASE A LA SIGUIENTE.
 			FileInputStream fileWindows = new FileInputStream(new File(windowsFilePath));
 			XSSFWorkbook workbookWindows = new XSSFWorkbook(fileWindows);
 			XSSFSheet windowsSheet = workbookWindows.getSheetAt(0);
@@ -283,24 +293,26 @@ public class CruceWindows {
 			fileWindows.close();
 			workbookWindows.close();
 		} catch (Exception ex) {
-			System.err.println("ERROR: "+ex);
+			System.err.println("ERROR inv torre: "+ex);
 		}
 		return windowsInventary;
 	}
 
-	//PROBLEMA CON EL COINTAINS DE IP, TRAE 172.27.218.11 A 172.27.218.1 ; validar como validar con el ultimo substring
-	public static CiUcmdbWindows inventaryWindowsContainsCodHostAndIP(ArrayList<CiWindows> windowsInventary, ArrayList<CiUcmdbWindows> inventoryUCMDB) {		
+	
+	public static CiUcmdbWindows inventaryWindowsContainsCodHostAndIP(ArrayList<CiWindows> windowsInventary, ArrayList<CiUcmdbWindows> inventoryUCMDB) {
 		if(windowsInventary.size()==0 && inventoryUCMDB.size()==0) {
 			throw new InventoryException("El inventario se encuentra vacio"); 
 		}else {
+			//System.out.println(windowsInventary.size());
 			HashMap<String, CiUcmdbWindows> inventoryUCMDBhm = new HashMap<>();
 			for (CiUcmdbWindows ciUcmdbWindows : inventoryUCMDB) {
 				inventoryUCMDBhm.put(ciUcmdbWindows.getOnyxServiceCodes()+"_"+ciUcmdbWindows.getDisplayLabel().toUpperCase(), ciUcmdbWindows);
 			}
-
+			System.out.println("#|COD_HOSTNAME|IP_GESTION|SERVICECODE|DISPLAYLABEL|IP_GESTION|IP_ADDRESS|PROTOCOLO_DESCUBRIMIENTO|LAST_ACCESS_TIME|STATUS_LAST_ACCESS_TIME|STATUS CRUCE CONTRA UCMDB");
+//se puede usar eso e for key, value, y que primero valide por key, si no cumple valide por value.
 			for ( int i = 0 ; i<windowsInventary.size();i++) {
+				String lastAccessTimeisOld="";
 				CiWindows ciWindows = windowsInventary.get(i);
-
 				if(inventoryUCMDBhm.containsKey(ciWindows.getCodHostname().toUpperCase())){
 					if(inventoryUCMDBhm.get(ciWindows.getCodHostname().toUpperCase()).getIpGestion().equals(ciWindows.getIpGestion())
 							|| (inventoryUCMDBhm.get(ciWindows.getCodHostname().toUpperCase()).getIpGestion().contains(ciWindows.getIpGestion()+","))
@@ -308,22 +320,30 @@ public class CruceWindows {
 							|| (inventoryUCMDBhm.get(ciWindows.getCodHostname().toUpperCase()).getIpAddress().contains(ciWindows.getIpGestion()+","))
 							|| (inventoryUCMDBhm.get(ciWindows.getCodHostname().toUpperCase()).getIpAddress().endsWith(ciWindows.getIpGestion()))
 							
+							
 							){
-
+						lastAccessTimeisOld = checkLastAccessTime(inventoryUCMDBhm.get(ciWindows.getCodHostname().toUpperCase()).getLastAccessTimeProtocolo());
 						System.out.println(i+"|"+ciWindows.getCodHostname()+
 								"|"+ciWindows.getIpGestion()+"|"+inventoryUCMDBhm.get(ciWindows.getCodHostname().toUpperCase()).getDisplayLabel()+
 								"|"+inventoryUCMDBhm.get(ciWindows.getCodHostname().toUpperCase()).getOnyxServiceCodes()+
 								"|"+inventoryUCMDBhm.get(ciWindows.getCodHostname().toUpperCase()).getIpGestion()+
 								"|"+inventoryUCMDBhm.get(ciWindows.getCodHostname().toUpperCase()).getIpAddress()+
+								"|"+inventoryUCMDBhm.get(ciWindows.getCodHostname().toUpperCase()).getProtocoloDescubrimiento()+
+								"|"+inventoryUCMDBhm.get(ciWindows.getCodHostname().toUpperCase()).getLastAccessTimeProtocolo()+
+								"|"+lastAccessTimeisOld+
 								"|OK");
 
 					}else {
+						lastAccessTimeisOld = checkLastAccessTime(inventoryUCMDBhm.get(ciWindows.getCodHostname().toUpperCase()).getLastAccessTimeProtocolo());
 						System.out.println(i+"|"+ciWindows.getCodHostname()+
 								"|"+ciWindows.getIpGestion()+
 								"|"+inventoryUCMDBhm.get(ciWindows.getCodHostname().toUpperCase()).getDisplayLabel()+
 								"|"+inventoryUCMDBhm.get(ciWindows.getCodHostname().toUpperCase()).getOnyxServiceCodes()+
 								"|"+inventoryUCMDBhm.get(ciWindows.getCodHostname().toUpperCase()).getIpGestion()+
 								"|"+inventoryUCMDBhm.get(ciWindows.getCodHostname().toUpperCase()).getIpAddress()+
+								"|"+inventoryUCMDBhm.get(ciWindows.getCodHostname().toUpperCase()).getProtocoloDescubrimiento()+
+								"|"+inventoryUCMDBhm.get(ciWindows.getCodHostname().toUpperCase()).getLastAccessTimeProtocolo()+
+								"|"+lastAccessTimeisOld+
 								"|Validar, No coincide ip de gestion dada por inv torre");
 					}
 
@@ -338,6 +358,7 @@ public class CruceWindows {
 								|| ciUcmdbWindows.getIpGestion().endsWith(ciWindows.getIpGestion())
 								|| ciUcmdbWindows.getIpAddress().contains(ciWindows.getIpGestion()+",")
 								|| ciUcmdbWindows.getIpAddress().endsWith(ciWindows.getIpGestion())
+								
 								){
 							//1 obtener codigo de servicio , primer _ que encuentre antes del codhostname
 							//2 obtener displayLabel, es lo que este despues de _ 
@@ -351,12 +372,16 @@ public class CruceWindows {
 							}else {
 								errorMatch = " y no coincide codigo de servicio ni displayLabel";
 							}
+							lastAccessTimeisOld = checkLastAccessTime(ciUcmdbWindows.getLastAccessTimeProtocolo());
 							System.out.println(i+"|"+ciWindows.getCodHostname()+
 									"|"+ciWindows.getIpGestion()+
 									"|"+ciUcmdbWindows.getDisplayLabel()+
 									"|"+ciUcmdbWindows.getOnyxServiceCodes()+
 									"|"+ciUcmdbWindows.getIpGestion()+
 									"|"+ciUcmdbWindows.getIpAddress()+
+									"|"+ciUcmdbWindows.getProtocoloDescubrimiento()+
+									"|"+ciUcmdbWindows.getLastAccessTimeProtocolo()+
+									"|"+lastAccessTimeisOld+
 									"|Validar, Coincide Ip de gestion "+errorMatch
 									);
 							match=true;
@@ -365,7 +390,7 @@ public class CruceWindows {
 					}
 					if(!match) {
 						System.out.println(i+"|"+ciWindows.getCodHostname()+
-								"|"+ciWindows.getIpGestion()+"|||||PDT");
+								"|"+ciWindows.getIpGestion()+"|||||||||PDT");
 					}
 					
 				}
@@ -397,6 +422,30 @@ public class CruceWindows {
 		return null;
 	}
 
+	public static String checkLastAccessTime(String lastAccessTime) {
+		String lastAccessTimeisOld = "No se puede validar";
+		
+		if (lastAccessTime.length()>0) {
+		String [] lastAccess = lastAccessTime.split(", ");
+		LocalDateTime limitRecentAccessTime = LocalDateTime.now().minusDays(RANGE_DAYS_LAST_ACCESS_TIME);
+		DateTimeFormatter formatter = DateTimeFormatter.ofPattern("EEE MMM dd HH:mm:ss zzz yyyy",  Locale.ENGLISH);
+		LocalDateTime maxLastAccessTime = LocalDateTime.MIN;
+		
+		for (String date:lastAccess) {
+			LocalDateTime temporalDateTime = LocalDateTime.parse(date, formatter);	
+ 			if(temporalDateTime.isAfter(maxLastAccessTime)) {
+ 				maxLastAccessTime= temporalDateTime;
+			}
+		}
+		if(maxLastAccessTime.isBefore(limitRecentAccessTime)) {
+			lastAccessTimeisOld ="Last Access Time Antiguo";
+		}else {
+			lastAccessTimeisOld ="Last Access Time Reciente";
+			}
 
 
+		}
+		return lastAccessTimeisOld;
+	}
+		
 }
